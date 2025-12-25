@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>MapReduce Word Count Frontend</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 40px;
+                background-color: #f5f5f5;
+            }
+            h1 {
+                color: #333;
+                margin-bottom: 20px;
+            }
+            h2 {
+                color: #555;
+                margin-top: 30px;
+                margin-bottom: 15px;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background-color: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            .file-section {
+                margin-bottom: 30px;
+                padding: 20px;
+                background-color: #f9f9f9;
+                border-radius: 5px;
+            }
+            input[type="file"] {
+                padding: 10px;
+                border: 2px solid #ddd;
+                border-radius: 5px;
+                width: 100%;
+                box-sizing: border-box;
+                margin-bottom: 15px;
+            }
+            button {
+                background-color: #4caf50;
+                color: white;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                transition: background-color 0.3s;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            button:disabled {
+                background-color: #cccccc;
+                cursor: not-allowed;
+            }
+            #fileInfo {
+                margin-top: 15px;
+                padding: 10px;
+                background-color: #e8f5e9;
+                border-radius: 5px;
+                display: none;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 20px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+            th,
+            td {
+                border: 1px solid #ddd;
+                padding: 12px;
+                text-align: left;
+            }
+            th {
+                background-color: #4caf50;
+                color: white;
+                font-weight: bold;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            tr:hover {
+                background-color: #f1f1f1;
+            }
+            .status {
+                margin-top: 15px;
+                padding: 10px;
+                border-radius: 5px;
+                display: none;
+            }
+            .loading {
+                background-color: #fff3cd;
+                border: 1px solid #ffeaa7;
+                color: #856404;
+            }
+            .success {
+                background-color: #d4edda;
+                border: 1px solid #c3e6cb;
+                color: #155724;
+            }
+            .error {
+                background-color: #f8d7da;
+                border: 1px solid #f5c6cb;
+                color: #721c24;
+            }
+            .clear-btn {
+                background-color: #ff6b6b;
+                margin-left: 10px;
+            }
+            .clear-btn:hover {
+                background-color: #ff5252;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Подсчет слов mapreduce</h1>
+
+            <div class="file-section">
+                <p>
+                    <strong
+                        >Выберите один или несколько текстовых файлов:</strong
+                    >
+                </p>
+                <input type="file" id="fileInput" accept=".txt" multiple />
+
+                <div id="fileInfo"></div>
+
+                <button id="uploadBtn">Отправить на обработку</button>
+                <button id="clearBtn" class="clear-btn">Очистить</button>
+
+                <div id="status" class="status"></div>
+            </div>
+
+            <h2>Результат:</h2>
+            <div id="resultSection" style="display: none">
+                <div style="margin-bottom: 15px">
+                    <strong>Всего уникальных слов:</strong>
+                    <span id="totalWords">0</span>
+                    <strong style="margin-left: 20px">Всего слов:</strong>
+                    <span id="totalCount">0</span>
+                </div>
+                <table id="resultTable">
+                    <thead>
+                        <tr>
+                            <th>Слово</th>
+                            <th>Количество</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Результат будет вставляться сюда -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                const fileInput = document.getElementById("fileInput");
+                const uploadBtn = document.getElementById("uploadBtn");
+                const clearBtn = document.getElementById("clearBtn");
+                const fileInfo = document.getElementById("fileInfo");
+                const status = document.getElementById("status");
+                const resultSection = document.getElementById("resultSection");
+                const totalWords = document.getElementById("totalWords");
+                const totalCount = document.getElementById("totalCount");
+
+                // Обработчик изменения выбора файлов
+                fileInput.addEventListener("change", function () {
+                    updateFileInfo();
+                });
+
+                // Обработчик кнопки отправки
+                uploadBtn.addEventListener("click", async () => {
+                    if (!fileInput.files.length) {
+                        showStatus("Выберите файл!", "error");
+                        return;
+                    }
+
+                    const formData = new FormData();
+
+                    // Добавляем все выбранные файлы
+                    for (let i = 0; i < fileInput.files.length; i++) {
+                        formData.append("files", fileInput.files[i]);
+                    }
+
+                    // Показываем статус загрузки
+                    showStatus("Обработка файлов...", "loading");
+                    uploadBtn.disabled = true;
+
+                    try {
+                        const response = await fetch(
+                            "http://127.0.0.1:8080/upload",
+                            {
+                                method: "POST",
+                                body: formData,
+                            },
+                        );
+
+                        if (!response.ok) {
+                            throw new Error(
+                                `Ошибка сервера: ${response.status}`,
+                            );
+                        }
+
+                        const result = await response.json();
+
+                        // Скрываем статус
+                        hideStatus();
+
+                        // Показываем результат
+                        displayResults(result);
+                    } catch (err) {
+                        showStatus("Ошибка: " + err.message, "error");
+                        console.error(err);
+                    } finally {
+                        uploadBtn.disabled = false;
+                    }
+                });
+
+                // Обработчик кнопки очистки
+                clearBtn.addEventListener("click", function () {
+                    fileInput.value = "";
+                    fileInfo.style.display = "none";
+                    fileInfo.innerHTML = "";
+                    resultSection.style.display = "none";
+                    hideStatus();
+                });
+
+                // Функция обновления информации о выбранных файлах
+                function updateFileInfo() {
+                    if (!fileInput.files.length) {
+                        fileInfo.style.display = "none";
+                        return;
+                    }
+
+                    let html = "<strong>Выбранные файлы:</strong><br><ul>";
+                    let totalSize = 0;
+
+                    for (let i = 0; i < fileInput.files.length; i++) {
+                        const file = fileInput.files[i];
+                        totalSize += file.size;
+                        html += `<li>${file.name} (${formatBytes(file.size)})</li>`;
+                    }
+
+                    html += `</ul><strong>Всего файлов:</strong> ${fileInput.files.length}`;
+                    html += `<br><strong>Общий размер:</strong> ${formatBytes(totalSize)}`;
+
+                    fileInfo.innerHTML = html;
+                    fileInfo.style.display = "block";
+                }
+
+                // Функция отображения результатов
+                function displayResults(result) {
+                    const tbody = document
+                        .getElementById("resultTable")
+                        .querySelector("tbody");
+                    tbody.innerHTML = "";
+
+                    // Преобразуем объект в массив для сортировки
+                    const resultsArray = Object.entries(result);
+
+                    // Сортируем по убыванию количества
+                    resultsArray.sort((a, b) => b[1] - a[1]);
+
+                    // Подсчитываем статистику
+                    let totalUniqueWords = resultsArray.length;
+                    let totalWordCount = 0;
+
+                    // Заполняем таблицу
+                    resultsArray.forEach(([word, count]) => {
+                        totalWordCount += count;
+
+                        const row = document.createElement("tr");
+                        const wordCell = document.createElement("td");
+                        const countCell = document.createElement("td");
+
+                        wordCell.textContent = word;
+                        countCell.textContent = count;
+
+                        row.appendChild(wordCell);
+                        row.appendChild(countCell);
+                        tbody.appendChild(row);
+                    });
+
+                    // Обновляем статистику
+                    totalWords.textContent = totalUniqueWords;
+                    totalCount.textContent = totalWordCount;
+
+                    // Показываем секцию с результатами
+                    resultSection.style.display = "block";
+
+                    // Прокручиваем к результатам
+                    resultSection.scrollIntoView({ behavior: "smooth" });
+                }
+
+                // Функция показа статуса
+                function showStatus(message, type) {
+                    status.textContent = message;
+                    status.className = `status ${type}`;
+                    status.style.display = "block";
+                }
+
+                // Функция скрытия статуса
+                function hideStatus() {
+                    status.style.display = "none";
+                    status.textContent = "";
+                }
+
+                // Функция форматирования размера файла
+                function formatBytes(bytes, decimals = 2) {
+                    if (bytes === 0) return "0 Bytes";
+
+                    const k = 1024;
+                    const dm = decimals < 0 ? 0 : decimals;
+                    const sizes = ["Bytes", "KB", "MB", "GB"];
+
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+                    return (
+                        parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) +
+                        " " +
+                        sizes[i]
+                    );
+                }
+            });
+        </script>
+    </body>
+</html>
